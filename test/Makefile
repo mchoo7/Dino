@@ -3,9 +3,14 @@
 
 # defaults
 SIM ?= icarus
+WAVES ?= 1
 TOPLEVEL_LANG ?= verilog
 SRC_DIR = $(PWD)/../src
-PROJECT_SOURCES = debounce.v dino_game_top.v dino_render.v dino_rom.v graphics_top.v hvsync_generator.v lfsr.v obs_render.v obs_rom.v obstacles.v player_controller.v player_physics.v score.v score_render.v audio_interface.v jump_sound_player.v game_over_sound_player.v bg_object.v bg_object_rom.v bg_render.v bg_line.v priority_encoder.v color_decoder.v ai_controller.v gamepad_pmod.v
+PROJECT_SOURCES = debounce.v dino_game_top.v dino_render.v dino_rom.v graphics_top.v \
+	hvsync_generator.v lfsr.v obs_render.v obs_rom.v obstacles.v player_controller.v \
+	player_physics.v score.v score_render.v audio_interface.v jump_sound_player.v \
+	game_over_sound_player.v bg_object.v bg_object_rom.v bg_render.v bg_line.v \
+	priority_encoder.v color_decoder.v ai_controller.v gamepad_pmod.v
 
 ifneq ($(GATES),yes)
 
@@ -37,8 +42,8 @@ COMPILE_ARGS 		+= -I$(SRC_DIR)
 VERILOG_SOURCES += $(PWD)/tb.v
 TOPLEVEL = tb
 
-# MODULE is the basename of the Python test file
-MODULE = test
+# List test modules to run, separated by commas and without the .py suffix:
+COCOTB_TEST_MODULES = test
 
 # include cocotb's make rules to take care of the simulator setup
 include $(shell cocotb-config --makefiles)/Makefile.sim
