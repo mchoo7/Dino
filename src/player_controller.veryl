@@ -1,0 +1,117 @@
+module player_controller (
+    clk             : input  clock   ,
+    rst_n           : input  reset   ,
+    game_tick       : input  logic<2>,
+    button_start    : input  logic   ,
+    button_up       : input  logic   ,
+    button_down     : input  logic   ,
+    crash           : input  logic   ,
+    player_position : output logic<6>,
+    game_frozen     : output logic   ,
+    game_start_pulse: output logic   ,
+    game_over_pulse : output logic   ,
+    jump_pulse      : output logic   ,
+    game_state      : output logic<3>,
+) {
+
+    const RESTART  : logic<3> = 3'b000;
+    const JUMPING  : logic<3> = 3'b001;
+    const RUNNING1 : logic<3> = 3'b010;
+    const RUNNING2 : logic<3> = 3'b011;
+    const DUCKING  : logic<3> = 3'b100;
+    const GAME_OVER: logic<3> = 3'b101;
+
+    var running      : logic;
+    var jump_done    : logic;
+    var physics_rst_n: reset;
+    var game_over    : logic;
+
+    always_ff (clk) {
+        if (!rst_n) {
+            game_state = RESTART;
+        } else {
+            case (game_state) {
+                RESTART: {
+                    if (game_tick[0] && button_start) {
+                        game_state = JUMPING;
+                    } else {
+                        game_state = RESTART;
+                    }
+                }
+                JUMPING: {
+                    if (crash) {
+                        game_state = GAME_OVER;
+                    } else if (game_tick[1] && jump_done) {
+                        game_state = RUNNING1;
+                    } else {
+                        game_state = JUMPING;
+                    }
+                }
+                RUNNING1: {
+                    if (crash) {
+                        game_state = GAME_OVER;
+                    } else if (game_tick[0] && button_down) {
+                        game_state = DUCKING;
+                    } else if (game_tick[0] && button_up) {
+                        game_state = JUMPING;
+                    } else if (game_tick[0]) {
+                        game_state = RUNNING2;
+                    } else {
+                        game_state = RUNNING1;
+                    }
+                }
+                RUNNING2: {
+                    if (crash) {
+                        game_state = GAME_OVER;
+                    } else if (game_tick[0] && button_down) {
+                        game_state = DUCKING;
+                    } else if (game_tick[0] && button_up) {
+                        game_state = JUMPING;
+                    } else if (game_tick[0]) {
+                        game_state = RUNNING1;
+                    } else {
+                        game_state = RUNNING2;
+                    }
+                }
+                DUCKING: {
+                    if (crash) {
+                        game_state = GAME_OVER;
+                    } else if (game_tick[0] && !button_down) {
+                        game_state = RUNNING1;
+                    } else {
+                        game_state = DUCKING;
+                    }
+                }
+                GAME_OVER: {
+                    if (game_tick[0] && button_start) {
+                        game_state = RUNNING1;
+                    } else {
+                        game_state = GAME_OVER;
+                    }
+                }
+                default: game_state = RESTART;
+            }
+        }
+    }
+
+    assign physics_rst_n = rst_n && !(game_state == GAME_OVER && game_tick[0] && button_start);
+    assign game_over     = (game_state == GAME_OVER);
+
+    inst u_player_physics: player_physics (
+        clk                         ,
+        rst_n      : physics_rst_n  ,
+        game_tick                   ,
+        game_over                   ,
+        jump_pulse                  ,
+        button_down                 ,
+        jump_done                   ,
+        position   : player_position,
+    );
+
+    assign running = (game_state == RUNNING1 || game_state == RUNNING2);
+
+    assign game_frozen      = (game_state == RESTART || game_state == GAME_OVER);
+    assign game_start_pulse = (game_frozen && game_tick[0] && button_start);
+    assign game_over_pulse  = (game_state != GAME_OVER && game_tick[0] && crash);
+    assign jump_pulse       = (running && game_tick[0] && button_up);
+}

@@ -1,0 +1,56 @@
+module obs_render #(
+    param CONV: u32 = 0,
+) (
+    clk: input clock           , // clock
+    rst: input reset_async_high,
+
+    // Graphics
+    i_hpos     : input  logic<10 - CONV>,
+    i_vpos     : input  logic<10 - CONV>,
+    o_color_obs: output logic           , // Dedicated outputs
+
+    // ROM
+    o_rom_counter : output logic<8>,
+    i_sprite_color: input  logic   ,
+
+    // Obstacle
+    i_xpos: input logic<10 - CONV>,
+) {
+    var y_offset : logic<10 - CONV>;
+    var x_offset : logic<10 - CONV>;
+    var in_sprite: logic           ;
+
+    var y_offset_r: logic<10 - CONV>;
+    var x_offset_r: logic<10 - CONV>;
+    always_ff (clk) {
+        if_reset {
+            y_offset_r = 0;
+            x_offset_r = 0;
+        } else {
+            y_offset_r = y_offset;
+            x_offset_r = x_offset;
+        }
+    }
+
+    always_comb {
+        y_offset  = i_vpos - 42;
+        x_offset  = i_hpos - i_xpos[9 - CONV:0] + 16;
+        in_sprite = (x_offset_r <: 16) && (y_offset_r <: 16);
+    }
+
+    // ROM addressing
+    var rom_x: logic<4>;
+    var rom_y: logic<4>;
+    always_comb {
+        rom_x         = x_offset_r[3:0];
+        rom_y         = y_offset_r[3:0];
+        o_rom_counter = {rom_y, rom_x};
+    }
+
+    always_comb {
+        o_color_obs = 1'b0;
+        if (in_sprite) {
+            o_color_obs = i_sprite_color;
+        }
+    }
+}

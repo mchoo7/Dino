@@ -1,0 +1,382 @@
+/*
+ * Copyright (c) 2025 UW ASIC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+module dino_game_top #(
+    param CONV: u32 = 2,
+) (
+    ui_in  : input  logic<8>, // Dedicated inputs
+    uo_out : output logic<8>, // Dedicated outputs
+    uio_in : input  logic<8>, // IOs: Input path
+    uio_out: output logic<8>, // IOs: Output path
+    uio_oe : output logic<8>, // IOs: Enable path (active high: 0=input, 1=output)
+    ena    : input  logic   , // always 1 when the design is powered, so you can ignore it
+    clk    : input  clock   , // clock
+    rst_n  : input  reset   , // reset_n - low to reset
+) {
+    var game_tick_60hz: logic   ;
+    var game_tick_20hz: logic<2>; // two consecutive pulses generated ([0] and then [1]), enabling pipelining
+
+    // GAME STATE SIGNALS
+    var crash           : logic   ; // set to 1'b1 by rendering when collision occurs
+    var player_position : logic<6>;
+    var game_start_pulse: logic   ;
+    var game_over_pulse : logic   ;
+    var game_frozen     : logic   ;
+    var jump_pulse      : logic   ;
+    var game_state      : logic<3>;
+
+    var obstacle1_pos : logic<10 - CONV>;
+    var obstacle2_pos : logic<10 - CONV>;
+    var obstacle1_type: logic<3>        ;
+    var obstacle2_type: logic<3>        ;
+
+    var bg_object_pos: logic<10 - CONV>;
+
+    var rng: logic<8>;
+
+    inst lfsr_inst: lfsr #(
+        NUM_BITS: 15,
+    ) (
+        clk           ,
+        enable   : ena,
+        lfsr_data: rng,
+    );
+
+    // Gamepad Pmod support
+    let gamepad_pmod_latch: logic = ui_in[4];
+    let gamepad_pmod_clk  : logic = ui_in[5];
+    let gamepad_pmod_data : logic = ui_in[6];
+    var gamepad_is_present: logic; // HIGH when gamepad is connected
+    var gamepad_up        : logic;
+    var gamepad_down      : logic;
+    var gamepad_start     : logic; // Can leverage start, select from SNES
+    var gamepad_b         : logic;
+    var gamepad_y         : logic;
+    var gamepad_select    : logic;
+    var gamepad_left      : logic;
+    var gamepad_right     : logic;
+    var gamepad_a         : logic;
+    var gamepad_x         : logic;
+    var gamepad_l         : logic;
+    var gamepad_r         : logic;
+
+    var button_start: logic;
+    var button_up   : logic;
+    var button_down : logic;
+
+    // Synchronizes pmod_data, pmod_clk, pmod_latch signals to system clock
+    // domain.
+    inst gamepad_pmod: gamepad_pmod_single (
+        // Inputs:
+        clk                           ,
+        rst_n                         ,
+        pmod_latch: gamepad_pmod_latch,
+        pmod_clk  : gamepad_pmod_clk  ,
+        pmod_data : gamepad_pmod_data ,
+
+        // Outputs:
+        is_present: gamepad_is_present,
+        up        : gamepad_up        ,
+        down      : gamepad_down      ,
+        start     : gamepad_start     ,
+        b         : gamepad_b         ,
+        y         : gamepad_y         ,
+        select    : gamepad_select    ,
+        left      : gamepad_left      ,
+        right     : gamepad_right     ,
+        a         : gamepad_a         ,
+        x         : gamepad_x         ,
+        l         : gamepad_l         ,
+        r         : gamepad_r         ,
+    );
+
+    inst player_constroller_inst: player_controller (
+        clk                             ,
+        rst_n                           ,
+        game_tick       : game_tick_20hz,
+        button_start                    ,
+        button_up                       ,
+        button_down                     ,
+        crash                           ,
+        player_position                 ,
+        game_frozen                     ,
+        game_start_pulse                ,
+        game_over_pulse                 ,
+        jump_pulse                      ,
+        game_state                      ,
+    );
+
+    inst obstacles_inst: obstacles #(
+        GEN_LINE: 71,
+        CONV        ,
+    ) (
+        clk                             ,
+        rst_n                           ,
+        game_frozen                     ,
+        game_start    : game_start_pulse,
+        game_tick     : game_tick_60hz  ,
+        rng                             ,
+        obstacle1_pos                   ,
+        obstacle2_pos                   ,
+        obstacle1_type                  ,
+        obstacle2_type                  ,
+    );
+
+    inst bg_object_inst: bg_object #(
+        CONV  ,
+    ) (
+        clk                             ,
+        rst_n                           ,
+        game_tick    : game_tick_20hz[0],
+        rng                             ,
+        bg_object_pos                   ,
+    );
+
+    // VGA signals
+    var hsync: logic   ;
+    var vsync: logic   ;
+    var R    : logic<2>;
+    var G    : logic<2>;
+    var B    : logic<2>;
+
+    // graphics/rendering signals
+    var hpos                  : logic<10 - CONV>;
+    var vpos                  : logic<10 - CONV>;
+    var color_dino            : logic           ;
+    var color_obs_1           : logic           ;
+    var color_obs_2           : logic           ;
+    var color_bg_object       : logic           ;
+    var color_bg_line         : logic           ;
+    var obs_color_1           : logic           ;
+    var obs_color_2           : logic           ;
+    var bg_object_color       : logic           ;
+    var dino_color            : logic           ;
+    var score_color_1         : logic           ;
+    var score_color_2         : logic           ;
+    var score_color_3         : logic           ;
+    var score_color_4         : logic           ;
+    var score_color_5         : logic           ;
+    var dino_rom_counter      : logic<6>        ;
+    var obs_rom_counter_1     : logic<8>        ;
+    var obs_rom_counter_2     : logic<8>        ;
+    var bg_objects_rom_counter: logic<6>        ;
+
+    inst dino_rom_inst: dino_rom (
+        clk                             ,
+        rst           : ~rst_n          ,
+        i_rom_counter : dino_rom_counter,
+        i_player_state: game_state      ,
+        o_sprite_color: dino_color      ,
+    );
+    inst obs_rom_inst_1: obs_rom (
+        clk                              ,
+        rst           : ~rst_n           ,
+        i_rom_counter : obs_rom_counter_1,
+        i_obs_type    : obstacle1_type   ,
+        o_sprite_color: obs_color_1      ,
+    );
+    inst obs_rom_inst_2: obs_rom (
+        clk                              ,
+        rst           : ~rst_n           ,
+        i_rom_counter : obs_rom_counter_2,
+        i_obs_type    : obstacle2_type   ,
+        o_sprite_color: obs_color_2      ,
+    );
+    inst bg_object_rom_inst: bg_object_rom (
+        clk                                   ,
+        rst           : ~rst_n                ,
+        i_rom_counter : bg_objects_rom_counter,
+        o_sprite_color: bg_object_color       ,
+    );
+    var score: logic<20>;
+
+    inst score_inst_1: score_render #(
+        CONV       ,
+        OFFSET: 140,
+    ) (
+        clk                         ,
+        rst          : ~rst_n       ,
+        num          : score[3:0]   ,
+        i_hpos       : hpos         ,
+        i_vpos       : vpos         ,
+        o_score_color: score_color_1,
+    );
+
+    inst score_inst_2: score_render #(
+        CONV       ,
+        OFFSET: 133,
+    ) (
+        clk                         ,
+        rst          : ~rst_n       ,
+        num          : score[7:4]   ,
+        i_hpos       : hpos         ,
+        i_vpos       : vpos         ,
+        o_score_color: score_color_2,
+    );
+
+    inst score_inst_3: score_render #(
+        CONV       ,
+        OFFSET: 126,
+    ) (
+        clk                         ,
+        rst          : ~rst_n       ,
+        num          : score[11:8]  ,
+        i_hpos       : hpos         ,
+        i_vpos       : vpos         ,
+        o_score_color: score_color_3,
+    );
+
+    inst score_inst_4: score_render #(
+        CONV       ,
+        OFFSET: 119,
+    ) (
+        clk                         ,
+        rst          : ~rst_n       ,
+        num          : score[15:12] ,
+        i_hpos       : hpos         ,
+        i_vpos       : vpos         ,
+        o_score_color: score_color_4,
+    );
+
+    inst score_inst_5: score_render #(
+        CONV       ,
+        OFFSET: 112,
+    ) (
+        clk                         ,
+        rst          : ~rst_n       ,
+        num          : score[19:16] ,
+        i_hpos       : hpos         ,
+        i_vpos       : vpos         ,
+        o_score_color: score_color_5,
+    );
+
+    inst dino_inst: dino_render #(
+        CONV  ,
+    ) (
+        clk                             ,
+        rst           : ~rst_n          ,
+        i_hpos        : hpos            ,
+        i_vpos        : vpos            ,
+        o_color_dino  : color_dino      ,
+        o_rom_counter : dino_rom_counter,
+        i_sprite_color: dino_color      ,
+        i_ypos        : player_position ,
+    );
+    inst obs_inst_1: obs_render #(
+        CONV  ,
+    ) (
+        clk                              ,
+        rst           : ~rst_n           ,
+        i_hpos        : hpos             ,
+        i_vpos        : vpos             ,
+        o_color_obs   : color_obs_1      ,
+        o_rom_counter : obs_rom_counter_1,
+        i_sprite_color: obs_color_1      ,
+        i_xpos        : obstacle1_pos    ,
+    );
+
+    inst obs_inst_2: obs_render #(
+        CONV  ,
+    ) (
+        clk                              ,
+        rst           : ~rst_n           ,
+        i_hpos        : hpos             ,
+        i_vpos        : vpos             ,
+        o_color_obs   : color_obs_2      ,
+        o_rom_counter : obs_rom_counter_2,
+        i_sprite_color: obs_color_2      ,
+        i_xpos        : obstacle2_pos    ,
+    );
+
+    inst bg_render_inst: bg_render #(
+        CONV  ,
+    ) (
+        clk                                   ,
+        rst           : ~rst_n                ,
+        i_hpos        : hpos                  ,
+        i_vpos        : vpos                  ,
+        o_color_bg    : color_bg_object       ,
+        o_rom_counter : bg_objects_rom_counter,
+        i_sprite_color: bg_object_color       ,
+        i_xpos        : bg_object_pos         ,
+    );
+    inst bg_line_inst: bg_line #(
+        CONV        ,
+        GND_LINE: 59,
+    ) (
+        i_vpos    : vpos         ,
+        o_color_bg: color_bg_line,
+    );
+    inst graphics_inst: graphics_top #(
+        CONV  ,
+    ) (
+        clk                                                                                              ,
+        rst               : ~rst_n                                                                       ,
+        o_hsync           : hsync                                                                        ,
+        o_vsync           : vsync                                                                        ,
+        o_blue            : B                                                                            ,
+        o_green           : G                                                                            ,
+        o_red             : R                                                                            ,
+        i_color_background: color_bg_object | color_bg_line                                              ,
+        i_color_obstacle  : color_obs_1 | color_obs_2                                                    ,
+        i_color_player    : color_dino                                                                   ,
+        i_color_score     : score_color_1 | score_color_2 | score_color_3 | score_color_4 | score_color_5,
+        i_game_start_pulse: game_start_pulse                                                             ,
+        o_hpos            : hpos                                                                         ,
+        o_vpos            : vpos                                                                         ,
+        i_rgb_scheme      : score[14]                                                                    ,
+        i_invert          : score[10]                                                                    ,
+        o_game_tick_60hz  : game_tick_60hz                                                               ,
+        o_game_tick_20hz  : game_tick_20hz[0]                                                            ,
+        o_game_tick_20hz_r: game_tick_20hz[1]                                                            ,
+        o_collision       : crash                                                                        ,
+    );
+
+    inst score_module_inst: ScoreModule (
+        game_start : game_start_pulse ,
+        game_frozen                   ,
+        game_tick  : game_tick_20hz[0],
+        clk                           , // clock
+        rst_n                         , // reset_n - low to reset
+        score                         ,
+    );
+
+    inst audio_inst: audio_interface (
+        clk                          ,
+        rst_n                        ,
+        game_is_over: game_over_pulse,
+        jump_pulse                   ,
+        sound       : uio_out[7]     ,
+    );
+
+    inst ai_controller_inst: ai_controller #(
+        CONV  ,
+    ) (
+        clk                                         ,
+        rst_n                                       ,
+        game_tick         : game_tick_60hz          ,
+        gamepad_is_present                          ,
+        gamepad_start                               ,
+        gamepad_up        : gamepad_up | gamepad_a  ,
+        gamepad_down      : gamepad_down | gamepad_b,
+        obstacle1_pos                               ,
+        obstacle2_pos                               ,
+        crash                                       ,
+        game_frozen                                 ,
+        button_start                                ,
+        button_up                                   ,
+        button_down                                 ,
+    );
+
+    // TinyVGA PMOD
+    assign uo_out = {hsync, B[0], G[0], R[0], vsync, B[1], G[1], R[1]};
+
+    // All output pins must be assigned. If not used, assign to 0.
+    assign uio_out[6:0] = 0;
+    assign uio_oe       = 8'b10000000;
+
+    // List all unused inputs to prevent warnings
+    let _unused: logic = &{ena, ui_in[7], ui_in[3:0], uio_in, gamepad_start, gamepad_b, gamepad_y, gamepad_select, gamepad_left, gamepad_right, gamepad_a, gamepad_x, gamepad_l, gamepad_r, gamepad_is_present, 1'b0};
+}

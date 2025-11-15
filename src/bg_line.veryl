@@ -1,0 +1,16 @@
+module bg_line #(
+    param CONV    : u32 = 0,
+    param GND_LINE: u32 = 0,
+) (
+    // Graphics
+    i_vpos    : input  logic<10 - CONV>,
+    o_color_bg: output logic           , // Dedicated outputs
+) {
+    always_comb {
+        o_color_bg = 1'b0;
+        // optimize this heavily for ROM
+        if (i_vpos == GND_LINE) {
+            o_color_bg = 1'b1;
+        }
+    }
+}

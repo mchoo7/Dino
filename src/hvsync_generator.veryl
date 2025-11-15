@@ -1,0 +1,66 @@
+/*
+  Video sync generator, used to drive a VGA monitor.
+  Timing from: https://en.wikipedia.org/wiki/Video_Graphics_Array
+  To use:
+  - Wire the hsync and vsync signals to top level outputs
+  - Add a 3-bit (or more) "rgb" output to the top level
+*/
+
+module hvsync_generator (
+    clk       : input  clock               ,
+    rst       : input  reset_async_high    ,
+    hsync     : output logic               ,
+    vsync     : output logic               ,
+    display_on: output logic               ,
+    hpos      : output logic           <10>,
+    vpos      : output logic           <10>,
+) {
+    // declarations for TV-simulator sync parameters
+    // horizontal constants
+    const H_DISPLAY: logic<10> = 640; // horizontal display width
+    const H_BACK   : logic<10> = 48; // horizontal left border (back porch)
+    const H_FRONT  : logic<10> = 16; // horizontal right border (front porch)
+    const H_SYNC   : logic<10> = 96; // horizontal sync width
+    // vertical constants
+    const V_DISPLAY: logic<10> = 480; // vertical display height
+    const V_TOP    : logic<10> = 33; // vertical top border
+    const V_BOTTOM : logic<10> = 10; // vertical bottom border
+    const V_SYNC   : logic<10> = 2; // vertical sync # lines
+    // derived constants
+    const H_SYNC_START: logic<10> = H_DISPLAY + H_FRONT;
+    const H_SYNC_END  : logic<10> = H_DISPLAY + H_FRONT + H_SYNC - 1;
+    const H_MAX       : logic<10> = H_DISPLAY + H_BACK + H_FRONT + H_SYNC - 1;
+    const V_SYNC_START: logic<10> = V_DISPLAY + V_BOTTOM;
+    const V_SYNC_END  : logic<10> = V_DISPLAY + V_BOTTOM + V_SYNC - 1;
+    const V_MAX       : logic<10> = V_DISPLAY + V_TOP + V_BOTTOM + V_SYNC - 1;
+
+    var hmaxxed: logic;
+    var vmaxxed: logic;
+    assign hmaxxed = (hpos == H_MAX) || rst; // set when hpos is maximum
+    assign vmaxxed = (vpos == V_MAX) || rst; // set when vpos is maximum
+
+    // horizontal position counter
+    always_ff (clk) {
+        if (hmaxxed) {
+            hpos = 0;
+        } else {
+            hpos = hpos + 1;
+        }
+    }
+
+    // vertical position counter
+    always_ff (clk) {
+        if (hmaxxed) {
+            if (vmaxxed) {
+                vpos = 0;
+            } else {
+                vpos = vpos + 1;
+            }
+        }
+    }
+
+    // display_on is set when beam is in "safe" visible frame
+    assign display_on = (hpos <: H_DISPLAY) && (vpos <: V_DISPLAY);
+    assign vsync      = (vpos >= V_SYNC_START && vpos <= V_SYNC_END);
+    assign hsync      = (hpos >= H_SYNC_START && hpos <= H_SYNC_END);
+}

@@ -1,0 +1,59 @@
+/*
+ * Copyright (c) 2025 UW ASIC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+module ScoreModule (
+    game_start : input  logic    , // pulse for starting the counter
+    game_frozen: input  logic    , // If the game is frozen
+    game_tick  : input  logic    , // 60 Hz. end of frame pulse
+    clk        : input  clock    , // clock
+    rst_n      : input  reset    , // reset_n - low to reset
+    score      : output logic<20>,
+) {
+    // Internal registers to help with keeping track of the score in decimal
+    var score_int: logic<4> [5];
+
+    // determine if game_active
+    always_ff (clk) {
+        if (!rst_n || game_start) {
+            score_int[0] = 0;
+            score_int[1] = 0;
+            score_int[2] = 0;
+            score_int[3] = 0;
+            score_int[4] = 0;
+        } else {
+            if (!game_frozen && game_tick) {
+                if (score_int[0] == 9) {
+                    score_int[0] = 0;
+                    if (score_int[1] == 9) {
+                        score_int[1] = 0;
+                        if (score_int[2] == 9) {
+                            score_int[2] = 0;
+                            if (score_int[3] == 9) {
+                                score_int[3] = 0;
+                                if (score_int[4] == 9) {
+                                    // Reset the game if the score gets to 99999
+                                    score_int[4] = 0;
+                                } else {
+                                    score_int[4] = score_int[4] + 1;
+                                }
+                            } else {
+                                score_int[3] = score_int[3] + 1;
+                            }
+                        } else {
+                            score_int[2] = score_int[2] + 1;
+                        }
+                    } else {
+                        score_int[1] = score_int[1] + 1;
+                    }
+                } else {
+                    score_int[0] = score_int[0] + 1;
+                }
+            }
+
+        }
+    }
+
+    assign score = {score_int[4], score_int[3], score_int[2], score_int[1], score_int[0]};
+}

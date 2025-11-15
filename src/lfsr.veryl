@@ -1,0 +1,43 @@
+// See https://nandland.com/lfsr-linear-feedback-shift-register/
+
+module lfsr #(
+    param NUM_BITS: u32 = 8,
+) (
+    clk      : input  clock   ,
+    enable   : input  logic   ,
+    lfsr_data: output logic<8>,
+) {
+    // reg [NUM_BITS:1] r_lfsr = {NUM_BITS/2{2'b01}}; // 010101 ...
+    var r_lfsr: logic<NUM_BITS>; // 010101 ...
+
+    // Create Feedback Polynomials.  Based on Application Note:
+    // http://www.xilinx.com/support/documentation/application_notes/xapp052.pdf
+    let r_xnor: logic = case NUM_BITS {
+        3      : r_lfsr[2] ^ ~r_lfsr[1],
+        4      : r_lfsr[3] ^ ~r_lfsr[2],
+        5      : r_lfsr[4] ^ ~r_lfsr[2],
+        6      : r_lfsr[5] ^ ~r_lfsr[4],
+        7      : r_lfsr[6] ^ ~r_lfsr[5],
+        8      : ~(r_lfsr[7] ^ r_lfsr[5] ^ r_lfsr[4] ^ r_lfsr[3]),
+        9      : r_lfsr[8] ^ ~r_lfsr[4],
+        10     : r_lfsr[9] ^ ~r_lfsr[6],
+        11     : r_lfsr[10] ^ ~r_lfsr[8],
+        12     : ~(r_lfsr[11] ^ r_lfsr[5] ^ r_lfsr[3] ^ r_lfsr[0]),
+        13     : ~(r_lfsr[12] ^ r_lfsr[3] ^ r_lfsr[2] ^ r_lfsr[0]),
+        14     : ~(r_lfsr[13] ^ r_lfsr[4] ^ r_lfsr[2] ^ r_lfsr[0]),
+        15     : r_lfsr[14] ^ ~r_lfsr[13],
+        16     : ~(r_lfsr[15] ^ r_lfsr[14] ^ r_lfsr[12] ^ r_lfsr[3]),
+        default: 1'b0 // or handle error case as needed
+        ,
+    };
+
+    always_ff (clk) {
+        if (enable == 1'b1) {
+            r_lfsr = {r_lfsr[NUM_BITS - 2:0], r_xnor};
+        } else {
+            r_lfsr = 15'b0101010101010101;
+        }
+    }
+
+    assign lfsr_data = r_lfsr[7:0];
+}

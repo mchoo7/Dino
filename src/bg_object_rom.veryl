@@ -1,0 +1,33 @@
+module bg_object_rom (
+    clk           : input  clock              ,
+    rst           : input  reset_async_high   ,
+    i_rom_counter : input  logic           <6>,
+    o_sprite_color: output logic              ,
+) {
+    var rom_x: logic<3>;
+    var rom_y: logic<3>;
+
+    always_comb {
+        rom_y = i_rom_counter[5:3];
+        rom_x = i_rom_counter[2:0];
+    }
+
+    var icon_cloud: logic<8> [8];
+
+    always_ff (clk) {
+        if_reset {
+            icon_cloud[0] = 8'b00000000;
+            icon_cloud[1] = 8'b00000000;
+            icon_cloud[2] = 8'b00001100;
+            icon_cloud[3] = 8'b00011110;
+            icon_cloud[4] = 8'b01101011;
+            icon_cloud[5] = 8'b11000001;
+            icon_cloud[6] = 8'b11111111;
+            icon_cloud[7] = 8'b01100110;
+        }
+    }
+
+    always_comb {
+        o_sprite_color = icon_cloud[rom_y][rom_x];
+    }
+}

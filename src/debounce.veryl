@@ -1,0 +1,21 @@
+module button_debounce (
+    clk         : input  clock,
+    rst_n       : input  reset,
+    countdown_en: input  logic,
+    button_in   : input  logic,
+    button_out  : output logic,
+) {
+    var counter: logic<4>;
+
+    always_ff (clk) {
+        if_reset {
+            counter = 0;
+        } else if (button_in) {
+            counter = 15;
+        } else if (countdown_en && counter != 0) {
+            counter = counter - 1;
+        }
+    }
+
+    assign button_out = (counter != 0);
+}

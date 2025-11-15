@@ -1,0 +1,50 @@
+module score_render #(
+    param CONV    : u32 = 0,
+    param OFFSET  : u32 = 0,
+    param OFFSET_Y: u32 = 7,
+) (
+    clk          : input  clock                      ,
+    rst          : input  reset_async_high           ,
+    num          : input  logic           <4>        ,
+    i_hpos       : input  logic           <10 - CONV>,
+    i_vpos       : input  logic           <10 - CONV>,
+    o_score_color: output logic                      ,
+) {
+    var y_offset  : logic<10 - CONV>;
+    var x_offset  : logic<10 - CONV>;
+    var y_offset_r: logic<10 - CONV>;
+    var x_offset_r: logic<10 - CONV>;
+    var num_r     : logic<4>        ;
+    var in_sprite : logic           ;
+    var segment   : logic<7>        ;
+    always_ff (clk) {
+        if_reset {
+            x_offset_r = {{1'b0} repeat (9 - CONV + 1)};
+            y_offset_r = {{1'b0} repeat (9 - CONV + 1)};
+            num_r      = 4'd0;
+        } else {
+            num_r      = num;
+            x_offset_r = x_offset;
+            y_offset_r = y_offset;
+        }
+    }
+
+    always_comb {
+        y_offset = i_vpos - OFFSET_Y;
+        x_offset = i_hpos - OFFSET;
+
+        in_sprite = (x_offset_r <: 4) && (y_offset_r <: 7);
+
+        segment[0] = y_offset_r == 0 && (num_r == 0 || num_r == 2 || num_r == 3 || num_r == 5 || num_r == 6 || num_r == 7 || num_r == 8 || num_r == 9);
+        segment[1] = y_offset_r <: 3 && x_offset_r == 0 && (num_r == 0 || num_r == 4 || num_r == 5 || num_r == 6 || num_r == 8 || num_r == 9);
+        segment[2] = y_offset_r <: 3 && x_offset_r == 3 && (num_r == 0 || num_r == 1 || num_r == 2 || num_r == 3 || num_r == 4 || num_r == 7 || num_r == 8 || num_r == 9);
+        segment[3] = y_offset_r == 3 && (num_r == 2 || num_r == 3 || num_r == 4 || num_r == 5 || num_r == 6 || num_r == 8 || num_r == 9);
+        segment[4] = y_offset_r >: 3 && x_offset_r == 0 && (num_r == 0 || num_r == 2 || num_r == 6 || num_r == 8);
+        segment[5] = y_offset_r >: 3 && x_offset_r == 3 && (num_r == 0 || num_r == 1 || num_r == 3 || num_r == 4 || num_r == 5 || num_r == 6 || num_r == 7 || num_r == 8 || num_r == 9);
+        segment[6] = y_offset_r == 6 && (num_r == 0 || num_r == 2 || num_r == 3 || num_r == 5 || num_r == 6 || num_r == 8);
+    }
+
+    always_comb {
+        o_score_color = |segment && in_sprite;
+    }
+}

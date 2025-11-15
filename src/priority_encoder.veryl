@@ -1,0 +1,15 @@
+module priority_encoder_4_2 (
+    I0: input  logic,
+    I1: input  logic,
+    I2: input  logic,
+    I3: input  logic,
+    O0: output logic,
+    O1: output logic,
+    V : output logic,
+) {
+    always_comb {
+        V  = I0 || I1 || I2 || I3;
+        O0 = ((~I2) && I1) || I3;
+        O1 = I2 || I3;
+    }
+}

@@ -1,0 +1,59 @@
+module bg_render #(
+    param CONV: u32 = 0,
+) (
+    clk: input clock           , // clock
+    rst: input reset_async_high,
+
+    // Graphics
+    i_hpos    : input  logic<10 - CONV>,
+    i_vpos    : input  logic<10 - CONV>,
+    o_color_bg: output logic           , // Dedicated outputs
+
+    // ROM
+    o_rom_counter : output logic<6>,
+    i_sprite_color: input  logic   ,
+
+    // Bg
+    i_xpos: input logic<10 - CONV>,
+) {
+    var y_offset : logic<10 - CONV>;
+    var x_offset : logic<10 - CONV>;
+    var in_sprite: logic           ;
+
+    var y_offset_r: logic<10 - CONV>;
+    var x_offset_r: logic<10 - CONV>;
+    always_ff (clk) {
+        if_reset {
+            y_offset_r = 0;
+            x_offset_r = 0;
+        } else {
+            y_offset_r = y_offset;
+            x_offset_r = x_offset;
+        }
+    }
+
+    always_comb {
+        y_offset  = i_vpos - 15;
+        x_offset  = i_hpos - i_xpos[9 - CONV:0] + 8;
+        in_sprite = (x_offset_r <: 8) && (y_offset_r <: 8);
+    }
+
+    // ROM addressing
+    var rom_x: logic<3>;
+    var rom_y: logic<3>;
+    always_comb {
+        rom_x = x_offset_r[2:0];
+        rom_y = y_offset_r[2:0];
+    }
+    always_comb {
+        o_rom_counter = {rom_y, rom_x};
+    }
+
+    always_comb {
+        o_color_bg = 1'b0;
+        // optimize this heavily for ROM
+        if (in_sprite) {
+            o_color_bg = i_sprite_color;
+        }
+    }
+}

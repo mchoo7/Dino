@@ -1,0 +1,54 @@
+module ai_controller #(
+    param CONV             : u32 = 0 ,
+    param PLAYER_OFFSET    : u32 = 6 ,
+    param OBSTACLE_TRESHOLD: u32 = 40,
+) (
+    clk               : input  clock           ,
+    rst_n             : input  reset           ,
+    game_tick         : input  logic           ,
+    gamepad_is_present: input  logic           ,
+    gamepad_start     : input  logic           ,
+    gamepad_up        : input  logic           ,
+    gamepad_down      : input  logic           ,
+    obstacle1_pos     : input  logic<10 - CONV>,
+    obstacle2_pos     : input  logic<10 - CONV>,
+    crash             : input  logic           ,
+    game_frozen       : input  logic           ,
+    button_start      : output logic           ,
+    button_up         : output logic           ,
+    button_down       : output logic           ,
+) {
+    const RESTART_DELAY: u32 = 60; // Clock cycles to wait after crash to restart
+
+    // reg [9:CONV] obstacle_threshold; // When an obstacle reaches this xpos, set button_up signal
+    var restart_counter: logic<8>;
+
+    always_ff (clk) {
+        if_reset {
+            button_start    = 1'b0;
+            button_up       = 1'b0;
+            button_down     = 1'b0;
+            restart_counter = 8'b00000000;
+        } else if (gamepad_is_present) {
+            button_start = gamepad_start;
+            button_up    = gamepad_up;
+            button_down  = gamepad_down;
+        } else if (game_tick) {
+            if (crash | game_frozen) {
+                restart_counter = restart_counter + 1;
+                if (restart_counter == RESTART_DELAY) {
+                    button_start    = 1'b1;
+                    restart_counter = 8'b00000000;
+                } else {
+                    button_start = 1'b0;
+                }
+                button_up   = 1'b0;
+                button_down = 1'b0;
+            } else if ((obstacle1_pos <= OBSTACLE_TRESHOLD && obstacle1_pos >: PLAYER_OFFSET) || (obstacle2_pos <= OBSTACLE_TRESHOLD && obstacle2_pos >: PLAYER_OFFSET)) {
+                button_up = 1'b1;
+            } else {
+                button_up = 1'b0;
+            }
+        }
+    }
+}

@@ -1,0 +1,55 @@
+module obstacles #(
+    param CONV    : u32 = 0  ,
+    param GEN_LINE: u32 = 250,
+) (
+    clk           : input  clock           ,
+    rst_n         : input  reset           ,
+    game_frozen   : input  logic           ,
+    game_start    : input  logic           ,
+    game_tick     : input  logic           ,
+    rng           : input  logic<8>        ,
+    obstacle1_pos : output logic<10 - CONV>,
+    obstacle2_pos : output logic<10 - CONV>,
+    obstacle1_type: output logic<3>        ,
+    obstacle2_type: output logic<3>        ,
+) {
+    var obstacle1_cross_gen_line_reg: logic;
+    var obstacle2_cross_gen_line_reg: logic;
+    always_ff (clk) {
+        if (!rst_n || game_start) {
+            obstacle1_pos                = 0;
+            obstacle2_pos                = 0;
+            obstacle1_type               = 0;
+            obstacle2_type               = 0;
+            obstacle1_cross_gen_line_reg = 0;
+            obstacle2_cross_gen_line_reg = 1;
+        } else {
+            if (!game_frozen && game_tick) {
+                if (obstacle1_pos != 0) {
+                    obstacle1_pos = obstacle1_pos - 1;
+                }
+                if (obstacle2_pos != 0) {
+                    obstacle2_pos = obstacle2_pos - 1;
+                }
+
+                if (obstacle1_pos == GEN_LINE) {
+                    obstacle1_cross_gen_line_reg = 1;
+                }
+                if (obstacle2_pos == GEN_LINE) {
+                    obstacle2_cross_gen_line_reg = 1;
+                }
+
+                if (obstacle1_pos == 0 && obstacle2_cross_gen_line_reg) {
+                    obstacle1_pos                = {2'b10, {{1'b1} repeat (3 - CONV)}, rng[4:0]};
+                    obstacle1_type               = rng[7:5];
+                    obstacle2_cross_gen_line_reg = 0;
+                }
+                if (obstacle2_pos == 0 && obstacle1_cross_gen_line_reg) {
+                    obstacle2_pos                = {2'b10, {{1'b1} repeat (3 - CONV)}, rng[4:0]};
+                    obstacle2_type               = rng[7:5];
+                    obstacle1_cross_gen_line_reg = 0;
+                }
+            }
+        }
+    }
+}

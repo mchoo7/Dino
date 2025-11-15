@@ -1,0 +1,178 @@
+module graphics_top #(
+    param CONV: u32 = 0,
+) (
+    clk    : input  clock                      ,
+    rst    : input  reset_async_high           ,
+    o_hsync: output logic                      ,
+    o_vsync: output logic                      ,
+    o_blue : output logic           <2>        ,
+    o_red  : output logic           <2>        ,
+    o_green: output logic           <2>        ,
+    o_hpos : output logic           <10 - CONV>,
+    o_vpos : output logic           <10 - CONV>,
+
+    i_color_obstacle  : input logic,
+    i_color_player    : input logic,
+    i_color_background: input logic,
+    i_color_score     : input logic,
+    i_game_start_pulse: input logic,
+
+    i_rgb_scheme: input logic,
+    i_invert    : input logic,
+
+    o_game_tick_60hz  : output logic,
+    o_game_tick_20hz  : output logic,
+    o_game_tick_20hz_r: output logic,
+    o_collision       : output logic,
+) {
+    // ============== HVSYNC =============
+    // TODO can change hpos to increment by 2 to reduce bits
+    var hpos      : logic<10>;
+    var vpos      : logic<10>;
+    var display_on: logic    ;
+    // TODO can remove this pipeline stage if we don't need it
+    var hsync         : logic;
+    var vsync         : logic;
+    var hsync_r       : logic;
+    var vsync_r       : logic;
+    var hsync_r_r     : logic;
+    var vsync_r_r     : logic;
+    var display_on_r  : logic;
+    var display_on_r_r: logic;
+
+    // TODO create custom hsync
+    inst hvsync_gen: hvsync_generator (
+        clk         ,
+        rst         ,
+        hsync       ,
+        vsync       ,
+        vpos        ,
+        hpos        ,
+        display_on  ,
+    );
+
+    always_ff (clk) {
+        if_reset {
+            hsync_r        = 1'b0;
+            vsync_r        = 1'b0;
+            vsync_r_r      = 1'b0;
+            hsync_r_r      = 1'b0;
+            display_on_r   = 1'b0;
+            display_on_r_r = 1'b0;
+        } else {
+            vsync_r        = vsync;
+            hsync_r        = hsync;
+            vsync_r_r      = vsync_r;
+            hsync_r_r      = hsync_r;
+            display_on_r   = display_on;
+            display_on_r_r = display_on_r;
+        }
+    }
+
+    always_comb {
+        o_hsync = hsync_r_r;
+        o_vsync = vsync_r_r;
+    }
+
+    always_comb {
+        o_hpos = hpos[9 - CONV:0];
+        o_vpos = vpos[9 - CONV:0];
+    }
+
+    // ============== COMPARE =============
+    var is_colored: logic;
+    var O0        : logic;
+    var O1        : logic;
+    inst pe_4_2_inst: priority_encoder_4_2 (
+        I0: i_color_background,
+        I1: i_color_obstacle  ,
+        I2: i_color_player    ,
+        I3: i_color_score     ,
+        O0: O0                ,
+        O1: O1                ,
+        V : is_colored        ,
+    );
+    var R: logic<2>;
+    var G: logic<2>;
+    var B: logic<2>;
+
+    inst color_decoder_inst: color_decoder_2_6 (
+        is_colored              ,
+        layer     : {O1, O0}    ,
+        rgb_scheme: i_rgb_scheme,
+        invert    : i_invert    ,
+        R                       ,
+        G                       ,
+        B                       ,
+    );
+
+    var R_r: logic<2>;
+    var G_r: logic<2>;
+    var B_r: logic<2>;
+
+    always_ff (clk) {
+        if_reset {
+            R_r = 0;
+            G_r = 0;
+            B_r = 0;
+        } else {
+            R_r = R;
+            G_r = G;
+            B_r = B;
+        }
+    }
+
+    // ============ GENERATE RGB / TRANSFORM ============
+    // TODO stage can be merged with "CONVOLUTION" stage
+    always_comb {
+        o_red   = 2'b00;
+        o_green = 2'b00;
+        o_blue  = 2'b00;
+
+        // DEBUG remove after
+        if (~display_on_r_r) {
+            o_red   = 2'b00;
+            o_green = 2'b00;
+            o_blue  = 2'b00;
+        } else {
+            o_red   = R_r;
+            o_green = G_r;
+            o_blue  = B_r;
+        }
+
+    }
+
+    // ============ Other outputs ============
+    // TODO probably can merge game_tick_r logic with frame_counter
+    var frame_counter: logic<2>;
+    var game_tick_r  : logic   ;
+    var collision    : logic   ;
+
+    always_comb {
+        o_game_tick_60hz   = (vpos == 0) && (hpos == 0);
+        o_game_tick_20hz   = frame_counter == 1 && o_game_tick_60hz;
+        o_game_tick_20hz_r = game_tick_r;
+        o_collision        = collision;
+    }
+
+    always_ff (clk) {
+        if_reset {
+            frame_counter = 0;
+            game_tick_r   = 0;
+            collision     = 0;
+        } else {
+            if (o_game_tick_60hz) {
+                frame_counter = frame_counter + 1;
+                if (frame_counter == 2) {
+                    frame_counter = 0;
+                }
+            }
+            game_tick_r = o_game_tick_20hz;
+            if (i_game_start_pulse) {
+                collision = 1'b0;
+            } else if (i_color_obstacle && i_color_player && display_on_r) {
+                collision = 1'b1;
+            }
+        }
+    }
+}

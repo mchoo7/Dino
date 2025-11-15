@@ -1,0 +1,56 @@
+module player_physics #(
+    // determined from pygame example
+    param INITIAL_JUMP_VELOCITY: u32 = -7,
+    param DOWNWARD_ACCELERATION: u32 = 1 ,
+    param FASTDROP_VELOCITY    : u32 = 6 ,
+) (
+    clk        : input  clock   ,
+    rst_n      : input  reset   ,
+    game_tick  : input  logic<2>, // enable for the FF that stores result of velocity [0] and position [1]
+    game_over  : input  logic   , // collision has occured -- freeze dino
+    jump_pulse : input  logic   , // high for one clock cycle at start of jump (set initial velocity)
+    button_down: input  logic   , // high if down button is pressed
+    position   : output logic<6>, // -21..4
+    jump_done  : output logic   , // not(msb of adder) -- only sampled when game_tick[1] == 1
+) {
+    var velocity  : logic<4>; // -7..6
+    var active_vel: logic<4>;
+    var adder_in1 : logic<4>;
+    var adder_in2 : logic<6>;
+    var adder_res : logic<6>; // -21..4
+
+    // If player presses down, override velocity calculated by gravity with FASTDROP_VELOCITY
+    assign active_vel = if (button_down) ? FASTDROP_VELOCITY : velocity;
+
+    // game_tick[1] == 0 means calculating velocity, game_tick[1] == 1 means calculating position
+    assign adder_in1 = if (game_tick[1]) ? active_vel : DOWNWARD_ACCELERATION;
+    assign adder_in2 = if (game_tick[1]) ? position : {{{velocity[3]}} repeat 2, velocity};
+    assign adder_res = {{{velocity[3]} repeat 2}, adder_in1} + adder_in2;
+
+    always_ff (clk) {
+        if_reset {
+            velocity = 0;
+            position = 0; // Replace with ground position
+        } else if (!game_over) {
+            if (game_tick[0]) {
+                if (button_down) {
+                    velocity = 0;
+                } else if (jump_pulse) {
+                    velocity = INITIAL_JUMP_VELOCITY;
+                } else if (position[5]) {
+                    velocity = adder_res[3:0];
+                }
+            } else if (game_tick[1]) {
+                if (~adder_res[5]) {
+                    velocity = 0;
+                    position = 0;
+                } else {
+                    position = adder_res;
+                }
+            }
+        }
+    }
+
+    // Only sampled when game_tick[1] == 1, so jump_done == 1 when calculated position overflows
+    assign jump_done = ~adder_res[5];
+}

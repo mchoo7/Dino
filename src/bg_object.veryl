@@ -1,0 +1,23 @@
+module bg_object #(
+    param CONV: u32 = 0,
+) (
+    clk          : input  clock           ,
+    rst_n        : input  reset           ,
+    game_tick    : input  logic           , // 20 Hz
+    rng          : input  logic<8>        ,
+    bg_object_pos: output logic<10 - CONV>,
+) {
+    always_ff (clk) {
+        if_reset {
+            bg_object_pos = 0;
+        } else {
+            if (game_tick) {
+                if (bg_object_pos != 0) {
+                    bg_object_pos = bg_object_pos - 1;
+                } else {
+                    bg_object_pos = {{{1'b1} repeat (5 - CONV)}, rng[6:2]};
+                }
+            }
+        }
+    }
+}

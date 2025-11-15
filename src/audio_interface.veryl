@@ -1,0 +1,32 @@
+module audio_interface (
+    clk         : input  clock,
+    rst_n       : input  reset,
+    game_is_over: input  logic,
+    jump_pulse  : input  logic,
+    sound       : output logic,
+) {
+    var jump_sound     : logic;
+    var game_over_sound: logic;
+
+    always_ff (clk) {
+        if_reset {
+            sound = 0;
+        } else {
+            sound = jump_sound | game_over_sound;
+        }
+    }
+
+    inst i_jump: jump_sound_player (
+        clk                      ,
+        rst_n                    ,
+        sound_trigger: jump_pulse,
+        wave_out     : jump_sound,
+    );
+
+    inst i_over: game_over_sound_player (
+        clk                      ,
+        rst_n                    ,
+        is_over : game_is_over   ,
+        wave_out: game_over_sound,
+    );
+}

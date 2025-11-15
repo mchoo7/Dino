@@ -1,0 +1,172 @@
+module jump_sound_player (
+    clk          : input  clock, // 50 MHz clock
+    rst_n        : input  reset, // Enable this module
+    sound_trigger: input  logic, // One-shot pulse signal to generate sound
+    wave_out     : output logic, // Square wave output (registered)
+) {
+    const PWM_ARR_PERIOD: logic<19> = 19'd333333;
+
+    // Decay stages
+    const DECAY_0 : logic<19> = 19'd166666;
+    const DECAY_1 : logic<19> = 19'd140522;
+    const DECAY_2 : logic<19> = 19'd118300;
+    const DECAY_3 : logic<19> = 19'd99999;
+    const DECAY_4 : logic<19> = 19'd84313;
+    const DECAY_5 : logic<19> = 19'd71241;
+    const DECAY_6 : logic<19> = 19'd60130;
+    const DECAY_7 : logic<19> = 19'd50326;
+    const DECAY_8 : logic<19> = 19'd42483;
+    const DECAY_9 : logic<19> = 19'd35947;
+    const DECAY_10: logic<19> = 19'd30065;
+    const DECAY_11: logic<19> = 19'd25490;
+    const DECAY_12: logic<19> = 19'd21568;
+    const DECAY_13: logic<19> = 19'd18300;
+    const DECAY_14: logic<19> = 19'd15032;
+    const DECAY_15: logic<19> = 19'd13071;
+    const DECAY_16: logic<19> = 19'd10457;
+    const DECAY_17: logic<19> = 19'd9150;
+    const DECAY_18: logic<19> = 19'd7843;
+    const DECAY_19: logic<19> = 19'd6535;
+    const DECAY_20: logic<19> = 19'd5228;
+    const DECAY_21: logic<19> = 19'd4575;
+    const DECAY_22: logic<19> = 19'd3921;
+    const DECAY_23: logic<19> = 19'd3267;
+    const DECAY_24: logic<19> = 19'd2614;
+    const DECAY_25: logic<19> = 19'd1960;
+    const DECAY_26: logic<19> = 19'd1960;
+    const DECAY_27: logic<19> = 19'd1307;
+    const DECAY_28: logic<19> = 19'd1307;
+    const DECAY_29: logic<19> = 19'd25;
+    const DECAY_30: logic<19> = 19'd25;
+
+    // State machine states
+    const IDLE      : logic<2> = 2'b00;
+    const PLAY      : logic<2> = 2'b01;
+    const DONE      : logic<2> = 2'b10;
+    var state     : logic<2>;
+    var next_state: logic<2>;
+
+    var stage_index: logic<5> ; // Decay stage index
+    var counter    : logic<19>; // PWM period counter
+    var active     : logic    ; // Active flag
+    var decay_value: logic<19>;
+
+    // State Register
+    always_ff (clk) {
+        if_reset {
+            state = IDLE;
+        } else {
+            state = next_state;
+        }
+    }
+
+    always_comb {
+        case (state) {
+            IDLE: {
+                if (active) {
+                    next_state = PLAY;
+                } else {
+                    next_state = IDLE;
+                }
+            }
+
+            PLAY: {
+                if (stage_index == 30) {
+                    next_state = DONE;
+                } else {
+                    next_state = PLAY;
+                }
+            }
+
+            DONE: {
+                next_state = IDLE;
+            }
+
+            default: next_state = IDLE;
+        }
+    }
+
+    // State Machine
+    always_ff (clk) {
+        if_reset {
+            active      = 0;
+            stage_index = 0;
+            wave_out    = 0;
+            wave_out    = 0;
+        } else if (sound_trigger) {
+            active      = 1;
+            counter     = 0;
+            stage_index = 0;
+            wave_out    = 0;
+        } else {
+            case (state) {
+                IDLE: {
+                    stage_index = 0;
+                    counter     = 0;
+                    wave_out    = 0;
+                }
+
+                PLAY: {
+                    if (counter >= decay_value) {
+                        wave_out = 0; // Toggle waveform
+                    }
+
+                    if (counter >= PWM_ARR_PERIOD) { // Once we complete a full cycle
+                        wave_out    = 1;
+                        counter     = 0;
+                        stage_index = stage_index + 1;
+                    } else {
+                        counter = counter + 1;
+                    }
+
+                    case (stage_index) {
+                        5'd0   : decay_value = DECAY_0;
+                        5'd1   : decay_value = DECAY_1;
+                        5'd2   : decay_value = DECAY_2;
+                        5'd3   : decay_value = DECAY_3;
+                        5'd4   : decay_value = DECAY_4;
+                        5'd5   : decay_value = DECAY_5;
+                        5'd6   : decay_value = DECAY_6;
+                        5'd7   : decay_value = DECAY_7;
+                        5'd8   : decay_value = DECAY_8;
+                        5'd9   : decay_value = DECAY_9;
+                        5'd10  : decay_value = DECAY_10;
+                        5'd11  : decay_value = DECAY_11;
+                        5'd12  : decay_value = DECAY_12;
+                        5'd13  : decay_value = DECAY_13;
+                        5'd14  : decay_value = DECAY_14;
+                        5'd15  : decay_value = DECAY_15;
+                        5'd16  : decay_value = DECAY_16;
+                        5'd17  : decay_value = DECAY_17;
+                        5'd18  : decay_value = DECAY_18;
+                        5'd19  : decay_value = DECAY_19;
+                        5'd20  : decay_value = DECAY_20;
+                        5'd21  : decay_value = DECAY_21;
+                        5'd22  : decay_value = DECAY_22;
+                        5'd23  : decay_value = DECAY_23;
+                        5'd24  : decay_value = DECAY_24;
+                        5'd25  : decay_value = DECAY_25;
+                        5'd26  : decay_value = DECAY_26;
+                        5'd27  : decay_value = DECAY_27;
+                        5'd28  : decay_value = DECAY_28;
+                        5'd29  : decay_value = DECAY_29;
+                        5'd30  : decay_value = DECAY_30;
+                        default: decay_value = 19'd25;
+                    }
+                }
+
+                DONE: {
+                    wave_out = 0;
+                    active   = 0;
+                }
+
+                default: {
+                    active      = 0;
+                    counter     = 0;
+                    stage_index = 0;
+                    wave_out    = 0;
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,204 @@
+module obs_rom (
+    clk           : input  clock              ,
+    rst           : input  reset_async_high   ,
+    i_rom_counter : input  logic           <8>,
+    i_obs_type    : input  logic           <3>,
+    o_sprite_color: output logic              ,
+) {
+    const EMPTY      : logic<3> = 3'b000;
+    const CAC_3      : logic<3> = 3'b001;
+    const CAC_2      : logic<3> = 3'b010;
+    const CAC_THICK_1: logic<3> = 3'b011; // actually the same as cac thick 2 but just repeating for probability purposes
+    const CAC_THICK_2: logic<3> = 3'b100;
+    const CAC_THIN   : logic<3> = 3'b101;
+    const BIRD_LOW   : logic<3> = 3'b110;
+    const BIRD_HIGH  : logic<3> = 3'b111;
+
+    var rom_x: logic<4>;
+    var rom_y: logic<4>;
+
+    always_comb {
+        rom_y = i_rom_counter[7:4];
+        rom_x = i_rom_counter[3:0];
+    }
+
+    var icon_cac_3      : logic<16> [16];
+    var icon_cac_2      : logic<16> [16];
+    var icon_cac_thick_1: logic<16> [16];
+    var icon_cac_thick_2: logic<16> [16];
+    var icon_cac_thin   : logic<16> [16];
+    var icon_bird_low   : logic<16> [16];
+    var icon_bird_high  : logic<16> [16];
+
+    always_ff (clk) {
+        if_reset {
+            icon_cac_3[0]  = 16'b0000000000000000;
+            icon_cac_3[1]  = 16'b0000000000000000;
+            icon_cac_3[2]  = 16'b0000000000000000;
+            icon_cac_3[3]  = 16'b0000000000000000;
+            icon_cac_3[4]  = 16'b0000000000000000;
+            icon_cac_3[5]  = 16'b0000000000000000;
+            icon_cac_3[6]  = 16'b0000000000000000;
+            icon_cac_3[7]  = 16'b0000000110000000;
+            icon_cac_3[8]  = 16'b0001000110000100;
+            icon_cac_3[9]  = 16'b0001000110000100;
+            icon_cac_3[10] = 16'b0101010110010100;
+            icon_cac_3[11] = 16'b0101011110011101;
+            icon_cac_3[12] = 16'b0101000110100111;
+            icon_cac_3[13] = 16'b0011000111100100;
+            icon_cac_3[14] = 16'b0001000110000100;
+            icon_cac_3[15] = 16'b0001000110000100;
+        }
+    }
+
+    always_ff (clk) {
+        if_reset {
+            icon_cac_2[0]  = 16'b0000000000000000;
+            icon_cac_2[1]  = 16'b0000000000000000;
+            icon_cac_2[2]  = 16'b0000000000000000;
+            icon_cac_2[3]  = 16'b0000000000000000;
+            icon_cac_2[4]  = 16'b0000000000000000;
+            icon_cac_2[5]  = 16'b0000000000000000;
+            icon_cac_2[6]  = 16'b0000000000000000;
+            icon_cac_2[7]  = 16'b0000000000000000;
+            icon_cac_2[8]  = 16'b0000110000000000;
+            icon_cac_2[9]  = 16'b0000110000010000;
+            icon_cac_2[10] = 16'b0000110000010000;
+            icon_cac_2[11] = 16'b0010110000010100;
+            icon_cac_2[12] = 16'b0011110101011100;
+            icon_cac_2[13] = 16'b0000111101110000;
+            icon_cac_2[14] = 16'b0000110000010000;
+            icon_cac_2[15] = 16'b0000110000010000;
+        }
+    }
+    always_ff (clk) {
+        if_reset {
+            icon_cac_thick_1[0]  = 16'b0000000000000000;
+            icon_cac_thick_1[1]  = 16'b0000000000000000;
+            icon_cac_thick_1[2]  = 16'b0000000000000000;
+            icon_cac_thick_1[3]  = 16'b0000000000000000;
+            icon_cac_thick_1[4]  = 16'b0000000000000000;
+            icon_cac_thick_1[5]  = 16'b0000000000000000;
+            icon_cac_thick_1[6]  = 16'b0000000000000000;
+            icon_cac_thick_1[7]  = 16'b0000000110000000;
+            icon_cac_thick_1[8]  = 16'b0000001110000000;
+            icon_cac_thick_1[9]  = 16'b0000001110110000;
+            icon_cac_thick_1[10] = 16'b0000001110110000;
+            icon_cac_thick_1[11] = 16'b0001101111110000;
+            icon_cac_thick_1[12] = 16'b0001101110000000;
+            icon_cac_thick_1[13] = 16'b0001111110000000;
+            icon_cac_thick_1[14] = 16'b0000001110000000;
+            icon_cac_thick_1[15] = 16'b0000001110000000;
+        }
+    }
+    always_ff (clk) {
+        if_reset {
+            icon_cac_thick_2[0]  = 16'b0000000000000000;
+            icon_cac_thick_2[1]  = 16'b0000000000000000;
+            icon_cac_thick_2[2]  = 16'b0000000000000000;
+            icon_cac_thick_2[3]  = 16'b0000000000000000;
+            icon_cac_thick_2[4]  = 16'b0000000000000000;
+            icon_cac_thick_2[5]  = 16'b0000000000000000;
+            icon_cac_thick_2[6]  = 16'b0000000000000000;
+            icon_cac_thick_2[7]  = 16'b0000000000000000;
+            icon_cac_thick_2[8]  = 16'b0000000110000000;
+            icon_cac_thick_2[9]  = 16'b0000110110000000;
+            icon_cac_thick_2[10] = 16'b0000111110110000;
+            icon_cac_thick_2[11] = 16'b0000000110110000;
+            icon_cac_thick_2[12] = 16'b0000000111110000;
+            icon_cac_thick_2[13] = 16'b0000000110000000;
+            icon_cac_thick_2[14] = 16'b0000000110000000;
+            icon_cac_thick_2[15] = 16'b0000000110000000;
+        }
+    }
+    always_ff (clk) {
+        if_reset {
+            icon_cac_thin[0]  = 16'b0000000000000000;
+            icon_cac_thin[1]  = 16'b0000000000000000;
+            icon_cac_thin[2]  = 16'b0000000000000000;
+            icon_cac_thin[3]  = 16'b0000000000000000;
+            icon_cac_thin[4]  = 16'b0000000000000000;
+            icon_cac_thin[5]  = 16'b0000000000000000;
+            icon_cac_thin[6]  = 16'b0000000000000000;
+            icon_cac_thin[7]  = 16'b0000000000000000;
+            icon_cac_thin[8]  = 16'b0000000100000000;
+            icon_cac_thin[9]  = 16'b0000000100000000;
+            icon_cac_thin[10] = 16'b0000010100000000;
+            icon_cac_thin[11] = 16'b0000011100000000;
+            icon_cac_thin[12] = 16'b0000000101000000;
+            icon_cac_thin[13] = 16'b0000000111000000;
+            icon_cac_thin[14] = 16'b0000000100000000;
+            icon_cac_thin[15] = 16'b0000000100000000;
+        }
+    }
+    always_ff (clk) {
+        if_reset {
+            icon_bird_low[0]  = 16'b0000000000000000;
+            icon_bird_low[1]  = 16'b0000000000000000;
+            icon_bird_low[2]  = 16'b0000000000000000;
+            icon_bird_low[3]  = 16'b0000000000000000;
+            icon_bird_low[4]  = 16'b0000000000000000;
+            icon_bird_low[5]  = 16'b0010100011001100;
+            icon_bird_low[6]  = 16'b0001000100110010;
+            icon_bird_low[7]  = 16'b0000001000010001;
+            icon_bird_low[8]  = 16'b1010000000000000;
+            icon_bird_low[9]  = 16'b0100000000000000;
+            icon_bird_low[10] = 16'b0000000000000000;
+            icon_bird_low[11] = 16'b0000000000000000;
+            icon_bird_low[12] = 16'b0000000000000000;
+            icon_bird_low[13] = 16'b0000000000000000;
+            icon_bird_low[14] = 16'b0000000000000000;
+            icon_bird_low[15] = 16'b0000000000000000;
+        }
+    }
+    always_ff (clk) {
+        if_reset {
+            icon_bird_high[0]  = 16'b0000000000000000;
+            icon_bird_high[1]  = 16'b0000011001100000;
+            icon_bird_high[2]  = 16'b0000100110010000;
+            icon_bird_high[3]  = 16'b0001000010001000;
+            icon_bird_high[4]  = 16'b0000000000000000;
+            icon_bird_high[5]  = 16'b0000000000000000;
+            icon_bird_high[6]  = 16'b0000000000000000;
+            icon_bird_high[7]  = 16'b0000000000000000;
+            icon_bird_high[8]  = 16'b0000000000000000;
+            icon_bird_high[9]  = 16'b0000000000000000;
+            icon_bird_high[10] = 16'b0000000000000000;
+            icon_bird_high[11] = 16'b0000000000000000;
+            icon_bird_high[12] = 16'b0000000000000000;
+            icon_bird_high[13] = 16'b0000000000000000;
+            icon_bird_high[14] = 16'b0000000000000000;
+            icon_bird_high[15] = 16'b0000000000000000;
+        }
+    }
+
+    always_comb {
+        case (i_obs_type) {
+            EMPTY: {
+                o_sprite_color = 1'b0;
+            }
+            CAC_3: {
+                o_sprite_color = icon_cac_3[rom_y][rom_x];
+            }
+            CAC_2: {
+                o_sprite_color = icon_cac_2[rom_y][rom_x];
+            }
+            CAC_THICK_1: {
+                o_sprite_color = icon_cac_thick_1[rom_y][rom_x];
+            }
+            CAC_THICK_2: {
+                o_sprite_color = icon_cac_thick_2[rom_y][rom_x];
+            }
+            CAC_THIN: {
+                o_sprite_color = icon_cac_thin[rom_y][rom_x];
+            }
+            BIRD_LOW: {
+                o_sprite_color = icon_bird_low[rom_y][rom_x];
+            }
+            BIRD_HIGH: {
+                o_sprite_color = icon_bird_high[rom_y][rom_x];
+            }
+            default: o_sprite_color = 1'b0;
+        }
+    }
+}

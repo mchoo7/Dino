@@ -1,0 +1,96 @@
+module dino_rom (
+    clk           : input  clock              , // clock
+    rst           : input  reset_async_high   ,
+    i_rom_counter : input  logic           <6>,
+    i_player_state: input  logic           <3>,
+    o_sprite_color: output logic              ,
+) {
+    // localparam RESTART   = 3'b000;
+    const JUMPING  : logic<3> = 3'b001;
+    const RUNNING_1: logic<3> = 3'b010;
+    const RUNNING_2: logic<3> = 3'b011;
+    const DUCKING  : logic<3> = 3'b100;
+    // localparam GAME_OVER = 3'b101;
+
+    var rom_x: logic<3>;
+    var rom_y: logic<3>;
+    always_comb {
+        rom_y = i_rom_counter[5:3];
+        rom_x = i_rom_counter[2:0];
+    }
+    var icon      : logic<8> [8];
+    var icon_run_1: logic<8> [8];
+    var icon_run_2: logic<8> [8];
+    var icon_duck : logic<8> [8];
+
+    always_ff (clk) {
+        if_reset {
+            icon[0] = 8'b01110000;
+            icon[1] = 8'b11110000;
+            icon[2] = 8'b00110000;
+            icon[3] = 8'b00111001;
+            icon[4] = 8'b00111111;
+            icon[5] = 8'b00011110;
+            icon[6] = 8'b00010100;
+            icon[7] = 8'b00010100;
+        }
+    }
+
+    always_ff (clk) {
+        if_reset {
+            icon_run_1[0] = 8'b01110000;
+            icon_run_1[1] = 8'b11110000;
+            icon_run_1[2] = 8'b00110000;
+            icon_run_1[3] = 8'b00111001;
+            icon_run_1[4] = 8'b00111111;
+            icon_run_1[5] = 8'b00011110;
+            icon_run_1[6] = 8'b00010100;
+            icon_run_1[7] = 8'b00000100;
+        }
+    }
+
+    always_ff (clk) {
+        if_reset {
+            icon_run_2[0] = 8'b01110000;
+            icon_run_2[1] = 8'b11110000;
+            icon_run_2[2] = 8'b00110000;
+            icon_run_2[3] = 8'b00111001;
+            icon_run_2[4] = 8'b00111111;
+            icon_run_2[5] = 8'b00011110;
+            icon_run_2[6] = 8'b00010100;
+            icon_run_2[7] = 8'b00010000;
+        }
+    }
+
+    always_ff (clk) {
+        if_reset {
+            icon_duck[0] = 8'b00000000;
+            icon_duck[1] = 8'b00000000;
+            icon_duck[2] = 8'b00000000;
+            icon_duck[3] = 8'b01110000;
+            icon_duck[4] = 8'b11111001;
+            icon_duck[5] = 8'b00111111;
+            icon_duck[6] = 8'b00011110;
+            icon_duck[7] = 8'b00010100;
+
+        }
+    }
+
+    always_comb {
+        case (i_player_state) {
+            JUMPING: {
+                o_sprite_color = icon[rom_y][rom_x];
+            }
+            RUNNING_1: {
+                o_sprite_color = icon_run_1[rom_y][rom_x];
+            }
+            RUNNING_2: {
+                o_sprite_color = icon_run_2[rom_y][rom_x];
+            }
+            DUCKING: {
+                o_sprite_color = icon_duck[rom_y][rom_x];
+            }
+            default: o_sprite_color = icon[rom_y][rom_x];
+        }
+    }
+}

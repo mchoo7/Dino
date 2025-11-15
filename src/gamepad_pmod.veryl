@@ -1,0 +1,308 @@
+// Vendored from: https://github.com/psychogenic/gamepad-pmod/blob/main/verilog/gamepad_pmod.v
+
+/*
+ * Copyright (c) 2025 Pat Deegan
+ * https://psychogenic.com
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Interfacing code for the Gamepad Pmod from Psycogenic Technologies,
+ * designed for Tiny Tapeout.
+ *
+ * There are two high-level modules that most users will be interested in:
+ * - gamepad_pmod_single: for a single controller;
+ * - gamepad_pmod_dual: for two controllers.
+ * 
+ * There are also two lower-level modules that you can use if you want to
+ * handle the interfacing yourself:
+ * - gamepad_pmod_driver: interfaces with the Pmod and provides the raw data;
+ * - gamepad_pmod_decoder: decodes the raw data into button states.
+ *
+ * The docs, schematics, PCB files, and firmware code for the Gamepad Pmod
+ * are available at https://github.com/psychogenic/gamepad-pmod.
+ */
+
+/**
+ * gamepad_pmod_driver -- Serial interface for the Gamepad Pmod.
+ *
+ * This module reads raw data from the Gamepad Pmod *serially*
+ * and stores it in a shift register. When the latch signal is received, 
+ * the data is transferred into `data_reg` for further processing.
+ *
+ * Functionality:
+ *   - Synchronizes the `pmod_data`, `pmod_clk`, and `pmod_latch` signals 
+ *     to the system clock domain.
+ *   - Captures serial data on each falling edge of `pmod_clk`.
+ *   - Transfers the shifted data into `data_reg` when `pmod_latch` goes low.
+ *
+ * Parameters:
+ *   - `BIT_WIDTH`: Defines the width of `data_reg` (default: 24 bits).
+ *
+ * Inputs:
+ *   - `rst_n`: Active-low reset.
+ *   - `clk`: System clock.
+ *   - `pmod_data`: Serial data input from the Pmod.
+ *   - `pmod_clk`: Serial clock from the Pmod.
+ *   - `pmod_latch`: Latch signal indicating the end of data transmission.
+ *
+ * Outputs:
+ *   - `data_reg`: Captured parallel data after shifting is complete.
+ */
+module gamepad_pmod_driver #(
+    param BIT_WIDTH: u32 = 24,
+) (
+    clk       : input  clock           ,
+    rst_n     : input  reset           ,
+    pmod_data : input  logic           ,
+    pmod_clk  : input  logic           ,
+    pmod_latch: input  logic           ,
+    data_reg  : output logic<BIT_WIDTH>,
+) {
+    var pmod_clk_prev  : logic           ;
+    var pmod_latch_prev: logic           ;
+    var shift_reg      : logic<BIT_WIDTH>;
+
+    // Sync Pmod signals to the clk domain:
+    var pmod_data_sync : logic<2>;
+    var pmod_clk_sync  : logic<2>;
+    var pmod_latch_sync: logic<2>;
+
+    always_ff (clk) {
+        if (~rst_n) {
+            pmod_data_sync  = 2'b0;
+            pmod_clk_sync   = 2'b0;
+            pmod_latch_sync = 2'b0;
+        } else {
+            pmod_data_sync  = {pmod_data_sync[0], pmod_data};
+            pmod_clk_sync   = {pmod_clk_sync[0], pmod_clk};
+            pmod_latch_sync = {pmod_latch_sync[0], pmod_latch};
+        }
+    }
+
+    always_ff (clk) {
+        if_reset {
+            /* set data and shift registers to all ones
+       * such that it is detected as "not present" yet.
+       */
+            data_reg        = {{1'b1} repeat BIT_WIDTH};
+            shift_reg       = {{1'b1} repeat BIT_WIDTH};
+            pmod_clk_prev   = 1'b0;
+            pmod_latch_prev = 1'b0;
+        }
+        {
+            pmod_clk_prev   = pmod_clk_sync[1];
+            pmod_latch_prev = pmod_latch_sync[1];
+
+            // Capture data on rising edge of pmod_latch:
+            if (pmod_latch_sync[1] & ~pmod_latch_prev) {
+                data_reg = shift_reg;
+            }
+
+            // Sample data on rising edge of pmod_clk:
+            if (pmod_clk_sync[1] & ~pmod_clk_prev) {
+                shift_reg = {shift_reg[BIT_WIDTH - 2:0], pmod_data_sync[1]};
+            }
+        }
+    }
+}
+
+
+/**
+ * gamepad_pmod_decoder -- Decodes raw data from the Gamepad Pmod.
+ *
+ * This module takes a 12-bit parallel data register (`data_reg`) 
+ * and decodes it into individual button states. It also determines
+ * whether a controller is connected.
+ *
+ * Functionality:
+ *   - If `data_reg` contains all `1's` (`0xFFF`), it indicates that no controller is connected.
+ *   - Otherwise, it extracts individual button states from `data_reg`.
+ *
+ * Inputs:
+ *   - `data_reg [11:0]`: Captured button state data from the gamepad.
+ *
+ * Outputs:
+ *   - `b, y, select, start, up, down, left, right, a, x, l, r`: Individual button states (`1` = pressed, `0` = released).
+ *   - `is_present`: Indicates whether a controller is connected (`1` = connected, `0` = not connected).
+ */
+module gamepad_pmod_decoder (
+    data_reg  : input  logic<12>,
+    b         : output logic    ,
+    y         : output logic    ,
+    select    : output logic    ,
+    start     : output logic    ,
+    up        : output logic    ,
+    down      : output logic    ,
+    left      : output logic    ,
+    right     : output logic    ,
+    a         : output logic    ,
+    x         : output logic    ,
+    l         : output logic    ,
+    r         : output logic    ,
+    is_present: output logic    ,
+) {
+    var _unused  : logic;
+    var reg_empty: logic;
+
+    assign _unused = &{b, y, select, left, right, a, x, l, r};
+
+    // When the controller is not connected, the data register will be all 1's
+    assign reg_empty  = (data_reg == 12'hfff);
+    assign is_present = if reg_empty ? 0 : 1'b1;
+    assign {b, y, select, start, up, down, left, right, a, x, l, r} = if reg_empty ? 0 : data_reg;
+
+}
+
+
+/**
+ * gamepad_pmod_single -- Main interface for a single Gamepad Pmod controller.
+ * 
+ * This module provides button states for a **single controller**, reducing 
+ * resource usage (fewer flip-flops) compared to a dual-controller version.
+ * 
+ * Inputs:
+ *   - `pmod_data`, `pmod_clk`, and `pmod_latch` are the signals from the PMOD interface.
+ * 
+ * Outputs:
+ *   - Each button's state is provided as a single-bit wire (e.g., `start`, `up`, etc.).
+ *   - `is_present` indicates whether the controller is connected (`1` = connected, `0` = not detected).
+ */
+module gamepad_pmod_single (
+    rst_n     : input reset,
+    clk       : input clock,
+    pmod_data : input logic,
+    pmod_clk  : input logic,
+    pmod_latch: input logic,
+
+    b         : output logic,
+    y         : output logic,
+    select    : output logic,
+    start     : output logic,
+    up        : output logic,
+    down      : output logic,
+    left      : output logic,
+    right     : output logic,
+    a         : output logic,
+    x         : output logic,
+    l         : output logic,
+    r         : output logic,
+    is_present: output logic,
+) {
+    var gamepad_pmod_data: logic<12>;
+
+    inst driver: gamepad_pmod_driver #(
+        BIT_WIDTH: 12,
+    ) (
+        rst_n                        ,
+        clk                          ,
+        pmod_data                    ,
+        pmod_clk                     ,
+        pmod_latch                   ,
+        data_reg  : gamepad_pmod_data,
+    );
+
+    inst decoder: gamepad_pmod_decoder (
+        data_reg  : gamepad_pmod_data,
+        b                            ,
+        y                            ,
+        select                       ,
+        start                        ,
+        up                           ,
+        down                         ,
+        left                         ,
+        right                        ,
+        a                            ,
+        x                            ,
+        l                            ,
+        r                            ,
+        is_present                   ,
+    );
+}
+
+
+/**
+ * gamepad_pmod_dual -- Main interface for the Pmod gamepad.
+ * This module provides button states for two controllers using
+ * 2-bit vectors for each button (e.g., start[1:0], up[1:0], etc.).
+ * 
+ * Each button state is represented as a 2-bit vector:
+ *   - Index 0 corresponds to the first controller (e.g., up[0], y[0], etc.).
+ *   - Index 1 corresponds to the second controller (e.g., up[1], y[1], etc.).
+ *
+ * The `is_present` signal indicates whether a controller is connected:
+ *   - `is_present[0] == 1` when the first controller is connected.
+ *   - `is_present[1] == 1` when the second controller is connected.
+ *
+ * Inputs:
+ *   - `pmod_data`, `pmod_clk`, and `pmod_latch` are the 3 wires coming from the Pmod interface.
+ *
+ * Outputs:
+ *   - Button state vectors for each controller.
+ *   - Presence detection via `is_present`.
+ */
+module gamepad_pmod_dual (
+    rst_n     : input reset,
+    clk       : input clock,
+    pmod_data : input logic,
+    pmod_clk  : input logic,
+    pmod_latch: input logic,
+
+    b         : output logic<2>,
+    y         : output logic<2>,
+    select    : output logic<2>,
+    start     : output logic<2>,
+    up        : output logic<2>,
+    down      : output logic<2>,
+    left      : output logic<2>,
+    right     : output logic<2>,
+    a         : output logic<2>,
+    x         : output logic<2>,
+    l         : output logic<2>,
+    r         : output logic<2>,
+    is_present: output logic<2>,
+) {
+
+    var gamepad_pmod_data: logic<24>;
+
+    inst driver: gamepad_pmod_driver (
+        rst_n                        ,
+        clk                          ,
+        pmod_data                    ,
+        pmod_clk                     ,
+        pmod_latch                   ,
+        data_reg  : gamepad_pmod_data,
+    );
+
+    inst decoder1: gamepad_pmod_decoder (
+        data_reg  : gamepad_pmod_data[11:0],
+        b         : b[0]                   ,
+        y         : y[0]                   ,
+        select    : select[0]              ,
+        start     : start[0]               ,
+        up        : up[0]                  ,
+        down      : down[0]                ,
+        left      : left[0]                ,
+        right     : right[0]               ,
+        a         : a[0]                   ,
+        x         : x[0]                   ,
+        l         : l[0]                   ,
+        r         : r[0]                   ,
+        is_present: is_present[0]          ,
+    );
+
+    inst decoder2: gamepad_pmod_decoder (
+        data_reg  : gamepad_pmod_data[23:12],
+        b         : b[1]                    ,
+        y         : y[1]                    ,
+        select    : select[1]               ,
+        start     : start[1]                ,
+        up        : up[1]                   ,
+        down      : down[1]                 ,
+        left      : left[1]                 ,
+        right     : right[1]                ,
+        a         : a[1]                    ,
+        x         : x[1]                    ,
+        l         : l[1]                    ,
+        r         : r[1]                    ,
+        is_present: is_present[1]           ,
+    );
+}

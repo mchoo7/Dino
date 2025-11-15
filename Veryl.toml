@@ -1,0 +1,7 @@
+[project]
+name = "tt_um_uwasic_dinogame"
+version = "0.1.0"
+[build]
+sources = ["src"]
+target = {type = "directory", path = "target"}
+reset_type = "async_low"

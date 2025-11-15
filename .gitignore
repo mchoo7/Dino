@@ -11,3 +11,10 @@ test/results.xml
 test/gate_level_netlist.v
 vga_sim/obj_dir
 all.v
+
+.build/
+/target
+/dependencies
+*.f
+
+obj_dir/

@@ -1,0 +1,54 @@
+module color_decoder_2_6 (
+    is_colored: input  logic   ,
+    layer     : input  logic<2>,
+    rgb_scheme: input  logic   ,
+    invert    : input  logic   ,
+    R         : output logic<2>,
+    G         : output logic<2>,
+    B         : output logic<2>,
+) {
+    always_comb {
+        case (layer) {
+            2'b00: {
+                R = 2'b01;
+                G = 2'b10;
+                B = 2'b10;
+            }
+            2'b01: {
+                R = 2'b00;
+                G = 2'b11;
+                B = 2'b00;
+            }
+            2'b10: {
+                R = 2'b10;
+                G = 2'b10;
+                B = 2'b00;
+            }
+            2'b11: {
+                R = 2'b00;
+                G = 2'b00;
+                B = 2'b00;
+            }
+            default: {
+                R = 2'b00;
+                G = 2'b00;
+                B = 2'b00;
+            }
+        }
+        if (~rgb_scheme) {
+            R = 2'b00;
+            G = 2'b00;
+            B = 2'b00;
+        }
+        if (~is_colored) {
+            R = 2'b11;
+            G = 2'b11;
+            B = 2'b11;
+        }
+        if (invert) {
+            R = ~R;
+            G = ~G;
+            B = ~B;
+        }
+    }
+}
